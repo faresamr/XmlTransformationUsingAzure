@@ -1,0 +1,234 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "FunctionAppPrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "metadata": {
+        "description": "Function App prefix"
+      }
+    },
+    "StorageNamePrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "metadata": {
+        "description": "Storage Name prefix"
+      }
+    },
+    "storageAccountType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_ZRS",
+        "Premium_LRS"
+      ],
+      "metadata": {
+        "description": "Storage Account type"
+      }
+    }
+  },
+  "variables": {
+    "functionAppName": "[concat(parameters('FunctionAppPrefix'), uniqueString(resourceGroup().id))]",
+    "hostingPlanName": "[variables('functionAppName')]",
+    "storageAccountName": "[concat(toLower(parameters('StorageNamePrefix')), uniqueString(resourceGroup().id))]",
+    "transformByXsltFunction": "[concat(resourceId('Microsoft.Web/sites', variables('functionAppName')),'/functions/XmlTransformByXSLT')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('storageAccountName')]",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "accountType": "[parameters('storageAccountType')]"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2015-04-01",
+      "name": "[variables('hostingPlanName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "name": "[variables('hostingPlanName')]",
+        "computeMode": "Dynamic",
+        "sku": "Dynamic"
+      }
+    },
+    {
+      "apiVersion": "2015-08-01",
+      "type": "Microsoft.Web/sites",
+      "name": "[variables('functionAppName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "functionapp",
+      "properties": {
+        "name": "[variables('functionAppName')]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "resources": [
+        {
+          "apiVersion": "2016-03-01",
+          "name": "appsettings",
+          "type": "config",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+          ],
+          "properties": {
+            "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+            "AzureWebJobsDashboard": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+            "FUNCTIONS_EXTENSION_VERSION": "~1",
+            "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+            "WEBSITE_CONTENTSHARE": "[toLower(variables('functionAppName'))]",
+            "WEBSITE_NODE_DEFAULT_VERSION": "6.5.0"
+          }
+        },
+        {
+          "apiVersion": "2015-08-01",
+          "name": "XmlTransformByXSLT",
+          "type": "functions",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+            "appsettings"
+          ],
+          "properties": {
+            "config": {
+              "bindings": [
+                {
+                  "authLevel": "anonymous",
+                  "name": "req",
+                  "type": "httpTrigger",
+                  "direction": "in"
+                },
+                {
+                  "name": "res",
+                  "type": "http",
+                  "direction": "out"
+                }
+              ]
+            },
+            "files": {
+              "run.csx": "#r \"System.Xml\"\n#r \"System.Xml.Linq\"\n#r \"System.IO\"\n\nusing System.Net;\nusing System.IO;\nusing System.Text;\nusing System.Xml;\nusing System.Xml.Linq;\nusing System.Xml.Xsl;\n\npublic static async Task<HttpResponseMessage> Run(HttpRequestMessage req, TraceWriter log)\n{\n    try\n    {\n        dynamic data = await req.Content.ReadAsAsync<object>();\n\n        string xsl=data.xml;\n        string input=data.xsl;\n        string output = \"\";\n\n        XDocument xmlTree = XDocument.Parse(Base64Decode(xsl));\n\n        XDocument newTree = new XDocument();\n        StringWriter sw = new StringWriter();\n        XmlWriterSettings writerSettings = new XmlWriterSettings();\n        writerSettings.ConformanceLevel = ConformanceLevel.Auto;\n        using (XmlWriter writer = newTree.CreateWriter())//newTree.CreateWriter()\n        {\n            XslCompiledTransform xslt = new XslCompiledTransform();\n            XsltSettings settings = new XsltSettings();\n            settings.EnableScript = true;\n\n            xslt.Load(XmlReader.Create(new StringReader(Base64Decode(input))),settings,null);\n            xslt.Transform(xmlTree.CreateReader(), writer);\n        }\n\n        output = newTree.ToString();\n\n\n        return req.CreateResponse(HttpStatusCode.OK, Base64Encode(output));\n    }\n    catch(Exception ex)\n    {\n        return req.CreateResponse(HttpStatusCode.BadRequest, ex.Message);\n    }\n}\n\npublic static string Base64Encode(string plainText) {\n  var plainTextBytes = System.Text.Encoding.UTF8.GetBytes(plainText);\n  return System.Convert.ToBase64String(plainTextBytes);\n}\n\npublic static string Base64Decode(string base64EncodedData) {\n  var base64EncodedBytes = System.Convert.FromBase64String(base64EncodedData);\n  return System.Text.Encoding.UTF8.GetString(base64EncodedBytes);\n}\n"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "XmlTransformTest",
+      "type": "Microsoft.Logic/workflows",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-06-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+        "XmlTransformByXSLT"
+      ],
+      "tags": {
+        "displayName": "XmlTransformTest"
+      },
+      "properties": {
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "actions": {
+            "Initialize_Input_variable": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "Input",
+                    "type": "String",
+                    "value": "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n<PurchaseOrder>\n  <Supplyer>Sup1</Supplyer>\n  <PurchaseDate>01/01/2018</PurchaseDate>\n  <PurchaseLines>\n    <PurchaseLine>\n      <Item>Item1</Item>\n      <Qty>10</Qty>\n      <UnitPrice>2</UnitPrice>\n    </PurchaseLine>\n    <PurchaseLine>\n      <Item>Item2</Item>\n      <Qty>25</Qty>\n      <UnitPrice>5</UnitPrice>\n    </PurchaseLine>\n  </PurchaseLines>\n</PurchaseOrder>"
+                  }
+                ]
+              },
+              "runAfter": {}
+            },
+            "Initialize_Output_variable": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "Output",
+                    "type": "String"
+                  }
+                ]
+              },
+              "runAfter": {
+                "Initialize_XSLT_Map_variable": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Initialize_XSLT_Map_variable": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "XSLT",
+                    "type": "String",
+                    "value": "<xsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" xmlns:msxsl=\"urn:schemas-microsoft-com:xslt\" xmlns:helper=\"urn:my-scripts\">\n\t<xsl:template match=\"PurchaseOrder\">\n\t  <PurchaseOrder Supplyer=\"{Supplyer}\" PurchaseDate=\"{helper:DateTimeFormat(PurchaseDate,'dd/MM/yyyy','ddMMyyyy')}\">\n\t\t<xsl:apply-templates select=\"PurchaseLines\"/>\n\t  </PurchaseOrder> \n\t</xsl:template>\n\t<xsl:template match=\"PurchaseLines\">\n\t  <PurchaseLines> \n\t\t<xsl:apply-templates/> \n\t  </PurchaseLines>\n\t</xsl:template> \n\t<xsl:template match=\"PurchaseLine\">\n\t  <PurchaseLine> \n\t\t  <xsl:for-each select=\"*\">\n\t\t\t  <xsl:attribute name=\"{name()}\">\n\t\t\t\t<xsl:value-of select=\"text()\"/> \n\t\t\t  </xsl:attribute>   \n\t\t  </xsl:for-each> \n\t  </PurchaseLine> \n\t</xsl:template>\n\t<msxsl:script language=\"C#\" implements-prefix=\"helper\">  \n\t\t<msxsl:using namespace=\"System\" />\n\t\t<![CDATA[\n\t\t\tpublic string DateTimeFormat(string value,string inputFormat, string outputFormat)\n\t\t\t{\n\t\t\t\tDateTime tmp;\n\t\t\t\tif (DateTime.TryParseExact(value, inputFormat, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out tmp))\n\t\t\t\t\treturn tmp.ToString(outputFormat);\n\t\t\t\telse\n\t\t\t\t\treturn null;\n\t\t\t}\n\t\t]]>\n\t</msxsl:script> \n</xsl:stylesheet>"
+                  }
+                ]
+              },
+              "runAfter": {
+                "Initialize_Input_variable": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_variable": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "Output",
+                "value": "@{base64ToString(body('TransformXSLT'))}"
+              },
+              "runAfter": {
+                "TransformXSLT": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "TransformXSLT": {
+              "type": "Function",
+              "inputs": {
+                "body": {
+                  "xml": "@{base64(variables('Input'))}",
+                  "xsl": "@{base64(variables('XSLT'))}"
+                },
+                "function": {
+                  "id": "[variables('transformByXsltFunction')]"
+                }
+              },
+              "runAfter": {
+                "Initialize_Output_variable": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+  "parameters": {},
+  "triggers": {
+    "Recurrence": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Month",
+        "interval": 10
+      }
+    }
+  },
+          "outputs": { }
+        },
+        "parameters": { }
+      }
+    }
+  ]
+}
