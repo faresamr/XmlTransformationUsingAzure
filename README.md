@@ -1,6 +1,7 @@
 # XML transformation using Azure Function and XSLT
 
 Sample ARM template contains:
+
 	 1. Azure Function to transform XML files by using XSLT maps
 	 2. Sample LogicApp transforms XML element to attribute and change date time format
 
