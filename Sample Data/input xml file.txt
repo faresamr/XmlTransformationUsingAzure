@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<PurchaseOrder>
+  <Supplyer>Sup1</Supplyer>
+  <PurchaseDate>01/01/2018</PurchaseDate>
+  <PurchaseLines>
+    <PurchaseLine>
+      <Item>Item1</Item>
+      <Qty>10</Qty>
+      <UnitPrice>2</UnitPrice>
+    </PurchaseLine>
+    <PurchaseLine>
+      <Item>Item2</Item>
+      <Qty>25</Qty>
+      <UnitPrice>5</UnitPrice>
+    </PurchaseLine>
+  </PurchaseLines>
+</PurchaseOrder>

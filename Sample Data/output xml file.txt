@@ -1,0 +1,11 @@
+<PurchaseOrder Supplyer="Sup1" PurchaseDate="01012018" xmlns:msxsl="urn:schemas-microsoft-com:xslt" xmlns:helper="urn:my-scripts">
+
+  <PurchaseLines>
+
+    <PurchaseLine Item="Item1" Qty="10" UnitPrice="2" />
+
+    <PurchaseLine Item="Item2" Qty="25" UnitPrice="5" />
+
+  </PurchaseLines>
+
+</PurchaseOrder>
