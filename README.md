@@ -11,6 +11,8 @@ Sample ARM template contains:
     <img src="http://azuredeploy.net/deploybutton.png">
 </a>
 
+
+
 Follow instructions below to deploy
 
 https://github.com/faresamr/XmlTransformationUsingAzure/wiki/How-to-deploy-the-Azure-function
