@@ -11,5 +11,5 @@ Sample ARM template contains:
     <img src="http://azuredeploy.net/deploybutton.png">
 </a>
 
-Follow instructions below to deploy sample logic app
-https://github.com/Microsoft/Dynamics-AX-Integration/wiki/Deploying-sample-Logic-apps
+Follow instructions below to deploy
+https://github.com/faresamr/XmlTransformationUsingAzure/wiki/How-to-deploy-the-Azure-function
