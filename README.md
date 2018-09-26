@@ -12,4 +12,5 @@ Sample ARM template contains:
 </a>
 
 Follow instructions below to deploy
+
 https://github.com/faresamr/XmlTransformationUsingAzure/wiki/How-to-deploy-the-Azure-function
